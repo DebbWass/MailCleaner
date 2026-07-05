@@ -557,4 +557,8 @@ def main():
                 status  = "[green]הצליח[/green]" if r.get("success") else "[red]לא הושלם[/red]"
                 console.print(f"  {r['account']}: {status} — {scanned} נסרקו, {cands} מועמדים למחיקה")
 
-    console.rule("[bold blue]MailCleaner סיים[/bold bl
+    console.rule("[bold blue]MailCleaner סיים[/bold blue]")
+
+
+if __name__ == "__main__":
+    main()

@@ -127,4 +127,79 @@ def build_report():
         for r in runs:
             ok = "✅" if r.get("completed") else "❌ לא הושלמה"
             rows += (f"<tr><td>{esc(r.get('date',''))} {esc(r.get('time',''))}</td>"
-                     f"<td>{esc(r.get('account', 'כ
+                     f"<td>{esc(r.get('account', 'כל החשבונות'))}</td>"
+                     f"<td>{r.get('total_scanned',0)}</td>"
+                     f"<td>{r.get('receipts',0)}</td>"
+                     f"<td>{r.get('newsletters',0)}</td>"
+                     f"<td>{r.get('deletion_candidates',0)}</td>"
+                     f"<td>{ok}</td></tr>")
+        runs_html = f"""<h3>🏃 ריצות השבוע ({len(runs)})</h3>
+<table border="1" cellpadding="6" style="border-collapse:collapse;font-size:14px">
+<tr style="background:#f0f0f0"><th>מתי</th><th>חשבון</th><th>נסרקו</th><th>קבלות</th>
+<th>ניוזלטרים</th><th>מועמדים חדשים</th><th>סטטוס</th></tr>
+{rows}</table>"""
+        scanned = sum(r.get("total_scanned", 0) for r in runs)
+        new_cand = sum(r.get("deletion_candidates", 0) for r in runs)
+        totals_html = (f"<p>סה\"כ השבוע: נסרקו <b>{scanned}</b> מיילים, "
+                       f"<b>{new_cand}</b> מועמדים חדשים למחיקה, "
+                       f"<b>{deletions}</b> מחיקות שביצעת נקלטו ללמידה.</p>")
+    else:
+        runs_html = ("<h3>🏃 ריצות השבוע</h3>"
+                     "<p>לא נרשמו ריצות ב-run_history השבוע. אם הסטטוס למעלה ✅ — "
+                     "הריצה עבדה אבל כל המיילים כבר נסרקו בעבר (תקין). "
+                     "אחרת — כדאי לבדוק את logs\\weekly_run.log.</p>")
+        totals_html = ""
+
+    # --- שגיאות ---
+    if errors or warnings:
+        samples = "".join(f"<li style='font-family:monospace;font-size:12px'>{esc(e[:160])}</li>"
+                          for e in errors[-5:])
+        err_html = f"""<h3 style="color:#c00">🚨 שגיאות ואזהרות השבוע</h3>
+<p>{len(errors)} שגיאות, {len(warnings)} אזהרות. אחרונות:</p>
+<ul>{samples or '<li>(רק אזהרות — ללא שגיאות)</li>'}</ul>
+<p style="font-size:13px;color:#666">הפירוט המלא ב-logs\\cleaner.log</p>"""
+    else:
+        err_html = "<h3>🚨 שגיאות</h3><p>אין! שבוע נקי לגמרי. 🎉</p>"
+
+    html = f"""<div dir="rtl" style="font-family:Arial,sans-serif;max-width:640px">
+<h2>{emoji} MailCleaner — דוח שבועי ({today})</h2>
+<p style="font-size:16px"><b>{headline}</b></p>
+{runs_html}
+{totals_html}
+<h3>🗑️ ממתין לך</h3>
+<p><b>{cand_count}</b> מועמדים למחיקה ממתינים לאישורך בתיקיית המועמדים
+(נכון ל-{esc(cand_when)}). המחיקה תמיד בידיים שלך — פתחי את הדשבורד לסקירה.</p>
+{err_html}
+<hr>
+<p style="color:#666;font-size:12px">נשלח אוטומטית ע"י MailCleaner — הריצה הבאה: יום ראשון הבא.</p>
+</div>"""
+    subject = f"{emoji} MailCleaner — דוח שבועי {today}"
+    return subject, html
+
+
+def main():
+    cfg = yaml.safe_load((BASE / "config.yaml").read_text(encoding="utf-8"))
+    acc = cfg["accounts"][0]  # sendit2dorit
+    address = acc["address"]
+    app_password = acc["imap"]["app_password"].replace(" ", "")
+
+    subject, html = build_report()
+
+    msg = MIMEText(html, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = address
+    msg["To"] = "sendit2dorit@gmail.com"
+
+    if "--test" in sys.argv:
+        print(f"[TEST] נושא: {subject}\n")
+        print(html)
+        return
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
+        smtp.login(address, app_password)
+        smtp.send_message(msg)
+    print("הדוח נשלח בהצלחה אל sendit2dorit@gmail.com")
+
+
+if __name__ == "__main__":
+    main()

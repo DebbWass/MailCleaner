@@ -30,4 +30,12 @@ env/
 dist/
 build/
 
-# --- OS 
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
