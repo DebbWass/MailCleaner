@@ -1,0 +1,33 @@
+# --- אישורים וסודות — לא להעלות לעולם! ---
+# מפתח Gmail API
+credentials.json
+# טוקני גישה
+token.json
+tokens/
+# הגדרות אישיות — מכיל סיסמאות אפליקציה!
+config.yaml
+
+# --- קבצי למידה ולוגים אישיים ---
+logs/
+*.jsonl
+*.log
+
+# קובץ gitignore ישן (הוחלף ב-.gitignore הזה)
+gitignore
+
+# --- קבצים כבדים / ארכיונים ---
+*.zip
+*.msi
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# --- OS 

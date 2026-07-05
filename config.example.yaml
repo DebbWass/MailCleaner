@@ -1,0 +1,55 @@
+# MailCleaner - תבנית הגדרות
+# העתק ל-config.yaml ומלא את הפרטים שלך. אל תעלה את config.yaml ל-Git!
+
+accounts:
+  - name: "MyAccount"
+    address: "me@gmail.com"
+    token_file: "tokens/me@gmail.com.json"
+    connection:
+      primary: "gmail_api"             # gmail_api | imap
+      fallback: "imap"
+    imap:
+      host: "imap.gmail.com"
+      port: 993
+      app_password: ""                 # סיסמת אפליקציה מ-Google
+
+rules:
+  important_senders:
+    - "boss@company.com"
+
+  spam_keywords:
+    - "unsubscribe"
+    - "newsletter"
+    - "הסר מרשימה"
+    - "מבצע"
+    - "promotion"
+    - "deal"
+    - "offer"
+    - "click here"
+
+  folders:
+    - name: "ניוזלטרים"
+      filter_keyword: "unsubscribe"
+    - name: "קבלות"
+      subject_keywords: ["receipt", "invoice", "order", "חשבונית", "קבלה"]
+    - name: "חשוב"
+      from_senders: []
+
+safety:
+  require_approval_before_delete: true
+  require_approval_before_unsubscribe: true
+  max_emails_per_run: 100
+  dry_run: false
+
+scheduler:
+  enabled: true
+  time: "08:00"
+  timezone: "Asia/Jerusalem"
+  days:
+    - "Sunday"
+  accounts: "all"
+
+logging:
+  enabled: true
+  file: "logs/cleaner.log"
+  level: "INFO"

@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MailCleaner Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10; --surface: #111318; --surface2: #181c24;
+    --border: #1e2330; --accent: #4f8ef7; --accent2: #22d3a0;
+    --accent3: #f7a24f; --danger: #f75f4f;
+    --text: #e8eaf0; --text-dim: #6b7280; --text-muted: #374151;
+    --mono: 'Space Mono', monospace; --sans: 'Heebo', sans-serif;
+    --panel-h: 240px;   /* גובה קבוע לפאנלים */
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; overflow-x:hidden; }
+  body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background: radial-gradient(ellipse 60% 40% at 20% 10%, rgba(79,142,247,0.06) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 60% at 80% 80%, rgba(34,211,160,0.05) 0%, transparent 70%); }
+
+  /* ── Header ── */
+  header { position:sticky; top:0; z-index:100; background:rgba(10,12,16,0.9);
+    backdrop-filter:blur(20px); border-bottom:1px solid var(--border);
+    padding:0 1.5rem; display:flex; align-items:center; justify-content:space-between; height:56px; }
+  .logo { display:flex; align-items:center; gap:0.6rem; font-weight:900; font-size:1.1rem; letter-spacing:-0.02em; }
+  .logo-icon { width:32px; height:32px; background:linear-gradient(135deg,var(--accent),var(--accent2));
+    border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1rem; }
+  .status-pill { display:flex; align-items:center; gap:0.4rem; padding:0.25rem 0.7rem;
+    background:rgba(34,211,160,0.1); border:1px solid rgba(34,211,160,0.2);
+    border-radius:100px; font-size:0.72rem; color:var(--accent2); font-weight:500; }
+  .status-dot { width:6px; height:6px; background:var(--accent2); border-radius:50%; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+
+  /* ── Layout ── */
+  main { position:relative; z-index:1; max-width:1400px; margin:0 auto; padding:1rem 1.5rem; display:grid; gap:1rem; }
+
+  /* ── Stats ── */
+  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:0.9rem 1.1rem; position:relative; overflow:hidden; transition:border-color 0.2s; }
+  .stat-card:hover { border-color:rgba(79,142,247,0.3); }
+  .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:var(--card-accent,var(--accent)); opacity:0.7; }
+  .stat-label { font-size:0.68rem; color:var(--text-dim); font-weight:500; text-transform:uppercase; letter-spacing:0.07em; margin-bottom:0.4rem; }
+  .stat-value { font-size:1.9rem; font-weight:900; font-family:var(--mono); line-height:1; }
+  .stat-sub { font-size:0.65rem; color:var(--text-dim); margin-top:0.25rem; }
+
+  /* ── Panel ── */
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .panel-header { padding:0.65rem 1rem; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; }
+  .panel-title { font-size:0.8rem; font-weight:700; display:flex; align-items:center; gap:0.4rem; }
+  .panel-body { padding:0.75rem 1rem; }
+
+  /* ── Panel body עם גלילה קבועה ── */
+  .panel-scroll { overflow-y:auto; max-height:var(--panel-h); scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+  .panel-scroll::-webkit-scrollbar { width:4px; }
+  .panel-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  /* ── Grid ── */
+  .content-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  .content-grid.three { grid-template-columns:1fr 1fr 1fr; }
+  @media(max-width:900px) { .stats-grid{grid-template-columns:repeat(2,1fr)} .content-grid,.content-grid.three{grid-template-columns:1fr} }
+
+  /* ── Email items ── */
+  .email-item { background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+    padding:0.5rem 0.75rem; margin-bottom:0.35rem; transition:border-color 0.15s; }
+  .email-item:last-child { margin-bottom:0; }
+  .email-item:hover { border-color:rgba(79,142,247,0.3); }
+  .email-from { font-size:0.72rem; color:var(--accent); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .email-subject { font-size:0.78rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .email-meta { font-size:0.65rem; color:var(--text-dim); font-family:var(--mono); }
+
+  /* ── Tags ── */
+  .tag { display:inline-flex; align-items:center; padding:0.15rem 0.5rem; border-radius:100px; font-size:0.65rem; font-weight:600; }
+  .tag-blue   { background:rgba(79,142,247,0.12); color:var(--accent); }
+  .tag-green  { background:rgba(34,211,160,0.12); color:var(--accent2); }
+  .tag-orange { background:rgba(247,162,79,0.12); color:var(--accent3); }
+  .tag-red    { background:rgba(247,95,79,0.12);  color:var(--danger); }
+
+  /* ── Pattern list ── */
+  .pattern-list { display:flex; flex-direction:column; gap:0.3rem; }
+  .pattern-item { display:flex; align-items:center; justify-content:space-between;
+    padding:0.35rem 0.6rem; background:var(--surface2); border-radius:6px; font-size:0.75rem; gap:0.5rem; }
+  .pattern-value { font-family:var(--mono); color:var(--text); font-size:0.68rem; }
+
+  /* ── Log ── */
+  .log-area { background:var(--bg); border:1px solid var(--border); border-radius:8px;
+    padding:0.75rem; font-family:var(--mono); font-size:0.68rem; color:var(--text-dim);
+    height:180px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; line-height:1.55;
+    scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+
+  /* ── Buttons ── */
+  .btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 1rem;
+    border-radius:8px; font-family:var(--sans); font-size:0.8rem; font-weight:600;
+    cursor:pointer; border:none; transition:all 0.15s; }
+  .btn:active { transform:scale(0.97); }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover { background:#6b9ef8; }
+  .btn-success { background:rgba(34,211,160,0.15); color:var(--accent2); border:1px solid rgba(34,211,160,0.25); }
+  .btn-success:hover { background:rgba(34,211,160,0.25); }
+  .btn-warning { background:rgba(247,162,79,0.15); color:var(--accent3); border:1px solid rgba(247,162,79,0.25); }
+  .btn-ghost { background:var(--surface2); color:var(--text-dim); border:1px solid var(--border); }
+  .btn-ghost:hover { color:var(--text); border-color:var(--accent); }
+  .btn-danger { background:var(--danger); color:#fff; }
+  .btn-icon { padding:0.3rem 0.5rem; font-size:0.72rem; }
+
+  /* ── Expand button ── */
+  .btn-expand { background:none; border:none; cursor:pointer; color:var(--text-dim);
+    font-size:0.72rem; padding:0.2rem 0.5rem; border-radius:5px; transition:all 0.15s;
+    display:flex; align-items:center; gap:0.25rem; }
+  .btn-expand:hover { background:var(--surface2); color:var(--accent); }
+
+  /* ── Modal ── */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);
+    backdrop-filter:blur(4px); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    width:min(800px,90vw); max-height:85vh; display:flex; flex-direction:column;
+    box-shadow:0 25px 60px rgba(0,0,0,0.6); animation:slideUp 0.2s ease; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+  .modal-header { padding:1rem 1.25rem; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .modal-title { font-size:1rem; font-weight:700; }
+  .modal-close { background:none; border:none; cursor:pointer; color:var(--text-dim);
+    font-size:1.2rem; padding:0.2rem 0.5rem; border-radius:5px; transition:all 0.15s; }
+  .modal-close:hover { background:var(--surface2); color:var(--danger); }
+  .modal-body { padding:1.25rem; overflow-y:auto; flex:1; }
+
+  /* ── Scan control ── */
+  .scan-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; }
+  @media(max-width:700px) { .scan-grid{grid-template-columns:1fr} }
+  .section-label { font-size:0.65rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.09em; color:var(--text-muted); margin-bottom:0.5rem; }
+
+  /* ── Output ── */
+  .output-box { background:var(--bg); border:1px solid var(--border); border-radius:8px;
+    padding:0.75rem; font-family:var(--mono); font-size:0.7rem; color:var(--accent2);
+    max-height:180px; overflow-y:auto; white-space:pre-wrap; display:none; margin-top:0.75rem; }
+  .output-box.visible { display:block; }
+
+  /* ── Spinner ── */
+  .spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.2);
+    border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; display:none; }
+  .spinner.active { display:block; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* ── Misc ── */
+  .empty { text-align:center; padding:1.5rem 1rem; color:var(--text-dim); font-size:0.78rem; line-height:1.6; }
+  .folder-row { display:flex; align-items:center; padding:0.18rem 0.3rem; border-radius:4px; transition:background 0.1s; }
+  .folder-row:hover { background:var(--surface2); }
+  table { width:100%; border-collapse:collapse; font-size:0.75rem; }
+  th { padding:0.35rem 0.5rem; border-bottom:1px solid var(--border); text-align:right;
+    color:var(--text-dim); font-size:0.65rem; text-transform:uppercase; letter-spacing:0.05em; }
+  td { padding:0.35rem 0.5rem; border-bottom:1px solid var(--border); text-align:right; }
+  tr:last-child td { border-bottom:none; }
+</style>
+</head>
+<body>
+
+<!-- ══ MODALS ══════════════════════════════════════════════════════════ -->
+
+<!-- Modal: מחיקות -->
+<div class="modal-overlay" id="modal-deletions" onclick="closeModal('deletions')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🗑️ כל המחיקות</span>
+      <button class="modal-close" onclick="closeModal('deletions')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-deletions-body"></div>
+  </div>
+</div>
+
+<!-- Modal: ספאם -->
+<div class="modal-overlay" id="modal-reviews" onclick="closeModal('reviews')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📬 כל סקירות ה-SPAM</span>
+      <button class="modal-close" onclick="closeModal('reviews')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-reviews-body"></div>
+  </div>
+</div>
+
+<!-- Modal: דפוסים -->
+<div class="modal-overlay" id="modal-patterns" onclick="closeModal('patterns')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">🧠 כל הדפוסים שנלמדו</span>
+      <button class="modal-close" onclick="closeModal('patterns')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-patterns-body"></div>
+  </div>
+</div>
+
+<!-- Modal: לוג -->
+<div class="modal-overlay" id="modal-log" onclick="closeModal('log')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📋 לוג מלא</span>
+      <button class="modal-close" onclick="closeModal('log')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-log-body" style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);white-space:pre-wrap;line-height:1.6"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: היסטוריה -->
+<div class="modal-overlay" id="modal-history" onclick="closeModal('history')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📖 היסטוריית ריצות מלאה</span>
+      <button class="modal-close" onclick="closeModal('history')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-history-body"></div>
+  </div>
+</div>
+
+<!-- Modal: דומיינים -->
+<div class="modal-overlay" id="modal-domains" onclick="closeModal('domains')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">📂 ניהול תיקיות קבלות</span>
+      <button class="modal-close" onclick="closeModal('domains')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-domains-body"></div>
+  </div>
+</div>
+
+<!-- Modal: סקירת SPAM -->
+<div class="modal-overlay" id="modal-spam-review" onclick="closeModal('spam-review')">
+  <div class="modal-box" onclick="event.stopPropagation()" style="width:min(900px,92vw)">
+    <div class="modal-header">
+      <div>
+        <span class="modal-title">📬 סקירת SPAM — מיילים שעלולים להיות לגיטימיים</span>
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.2rem">בחרי פעולה לכל מייל — הפעולות מתבצעות מיידית</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('spam-review')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-spam-body">
+      <div class="empty">לחצי "סרוק SPAM" כדי להתחיל</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ HEADER ══════════════════════════════════════════════════════════ -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">📧</div>
+    MailCleaner
+  </div>
+  <div style="display:flex;align-items:center;gap:0.75rem">
+    <!-- בורר חשבון -->
+    <div id="account-selector-wrap" style="display:none;align-items:center;gap:0.4rem">
+      <span style="font-size:0.65rem;color:var(--text-dim)">חשבון:</span>
+      <select id="account-select" onchange="onAccountChange(this.value)"
+        style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+               color:var(--text);font-size:0.72rem;padding:0.2rem 0.5rem;font-family:var(--sans);
+               cursor:pointer;outline:none;direction:ltr">
+      </select>
+    </div>
+    <span style="font-size:0.7rem;color:var(--text-dim);font-family:var(--mono)" id="last-refresh">טוען...</span>
+    <div class="status-pill"><div class="status-dot"></div>פעיל</div>
+  </div>
+</header>
+
+<!-- ══ MAIN ══════════════════════════════════════════════════════════ -->
+<main>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card" style="--card-accent:var(--accent)">
+      <div class="stat-label">מחיקות שנרשמו</div>
+      <div class="stat-value" id="stat-deletions">—</div>
+      <div class="stat-sub">סה״כ היסטוריה</div>
+    </div>
+    <div class="stat-card" style="--card-accent:var(--accent2)">
+      <div class="stat-label">דפוסים שנלמדו</div>
+      <div class="stat-value" id="stat-patterns">—</div>
+      <div class="stat-sub">כתובות + דומיינים + מילים</div>
+    </div>
+    <div class="stat-card" style="--card-accent:var(--accent3)">
+      <div class="stat-label">הוחזרו מספאם</div>
+      <div class="stat-value" id="stat-inbox">—</div>
+      <div class="stat-sub">False Positives</div>
+    </div>
+    <div class="stat-card" style="--card-accent:var(--danger)">
+      <div class="stat-label">אושרו כספאם</div>
+      <div class="stat-value" id="stat-spam">—</div>
+      <div class="stat-sub">מתיקיית SPAM</div>
+    </div>
+  </div>
+
+  <!-- ── בקרת סריקה ──────────────────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">⚙️ הגדרות סריקה</div>
+      <div style="display:flex;align-items:center;gap:0.5rem">
+        <div class="spinner" id="run-spinner"></div>
+        <span style="font-size:0.68rem;color:var(--text-dim)" id="run-status"></span>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="scan-grid">
+
+        <!-- עמודה 1: תיקיות -->
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+            <div class="section-label" style="margin:0">תיקיות לסריקה</div>
+            <button class="btn-ghost btn btn-icon" onclick="loadFolders()" title="רענן תיקיות">↻</button>
+          </div>
+          <input id="folder-search" type="text" placeholder="חפש תיקייה..."
+            oninput="renderFolderList(this.value.trim().toLowerCase())"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+                   padding:0.28rem 0.5rem;color:var(--text);font-size:0.75rem;margin-bottom:0.35rem;font-family:var(--sans)">
+          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.75rem;
+                        padding:0.25rem 0.4rem;border-radius:5px;border:1px solid var(--border);
+                        margin-bottom:0.35rem;background:var(--surface2);font-weight:600">
+            <input type="checkbox" id="select-all-folders" onchange="toggleAllFolders(this.checked)"
+              style="accent-color:var(--accent);width:12px;height:12px">
+            בחר הכל
+          </label>
+          <div id="folders-list" style="max-height:160px;overflow-y:auto;scrollbar-width:thin">
+            <div class="empty" style="padding:0.5rem;font-size:0.72rem">טוען...</div>
+          </div>
+        </div>
+
+        <!-- עמודה 2: כיוון + פילטר קריאה -->
+        <div style="display:flex;flex-direction:column;gap:0.85rem">
+          <div>
+            <div class="section-label">כיוון סריקה</div>
+            <div style="display:flex;flex-direction:column;gap:0.3rem">
+              <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.78rem">
+                <input type="radio" name="scan-order" value="newest" checked style="accent-color:var(--accent)"> מהחדש לישן
+              </label>
+              <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.78rem">
+                <input type="radio" name="scan-order" value="oldest" style="accent-color:var(--accent)"> מהישן לחדש
+              </label>
+            </div>
+          </div>
+          <div>
+            <div class="section-label">סנן לפי קריאה</div>
+            <div style="display:flex;flex-direction:column;gap:0.3rem">
+              <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.78rem">
+                <input type="radio" name="read-filter" value="all" checked style="accent-color:var(--accent)"> כל המיילים
+              </label>
+              <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.78rem">
+                <input type="radio" name="read-filter" value="unread" style="accent-color:var(--accent)"> לא נקראו
+              </label>
+              <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.78rem">
+                <input type="radio" name="read-filter" value="read" style="accent-color:var(--accent)"> נקראו
+              </label>
+            </div>
+          </div>
+          <div>
+            <div class="section-label">מיילים שנסרקו</div>
+            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.75rem">
+              <input type="checkbox" id="rescan-checkbox" style="accent-color:var(--accent3);width:12px;height:12px">
+              סרוק גם שנסרקו כבר
+            </label>
+            <div style="font-size:0.65rem;color:var(--text-dim);margin-top:0.3rem" id="scanned-count-label"></div>
+            <div style="font-size:0.65rem;color:var(--accent3);margin-top:0.25rem" id="protected-count-label"></div>
+            <button id="btn-clear-protected" onclick="clearProtected()" style="display:none;
+              margin-top:0.3rem;font-size:0.62rem;background:none;border:1px solid var(--border);
+              border-radius:4px;padding:0.15rem 0.4rem;cursor:pointer;color:var(--text-dim)">
+              אפס רשימת מוגנים
+            </button>
+          </div>
+        </div>
+
+        <!-- עמודה 3: כמות + כפתורים -->
+        <div style="display:flex;flex-direction:column;gap:0.85rem">
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
+              <div class="section-label" style="margin:0">מיילים לריצה: <span id="batch-max-label" style="color:var(--accent)">50</span></div>
+              <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.72rem;color:var(--accent2)">
+                <input type="checkbox" id="scan-all-toggle" onchange="toggleScanAll(this.checked)"
+                  style="accent-color:var(--accent2);width:12px;height:12px">
+                כל המיילים
+              </label>
+            </div>
+            <input type="range" id="batch-max" min="50" max="500" step="50" value="50"
+              oninput="document.getElementById('batch-max-label').textContent=this.value"
+              style="width:100%;accent-color:var(--accent)">
+            <div style="display:flex;justify-content:space-between;font-size:0.62rem;color:var(--text-dim)">
+              <span>50</span><span>500</span>
+            </div>
+            <div id="scan-all-note" style="display:none;font-size:0.65rem;color:var(--accent2);margin-top:0.35rem;line-height:1.4">
+              ⚡ כל המיילים — הסריקה תרוץ באצ'ים של 50<br>
+              עד שיגמרו כולם. עשוי לקחת זמן רב.
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.4rem">
+            <div style="display:flex;gap:0.4rem">
+              <button class="btn btn-primary" id="btn-run" onclick="runCleaner(false)" style="flex:1;justify-content:center">▶ סרוק</button>
+              <button class="btn btn-danger" id="btn-stop" onclick="stopCleaner()" style="display:none;flex:1;justify-content:center">⏹ עצור</button>
+              <button class="btn btn-ghost btn-icon" onclick="runCleaner(true)" title="סימולציה">🔍</button>
+            </div>
+            <button class="btn btn-success" onclick="learnFromFolder()" style="width:100%;justify-content:center">🧠 למד מתיקיית המועמדים</button>
+            <button class="btn btn-warning" onclick="openSpamReview()" style="width:100%;justify-content:center">📬 סרוק SPAM</button>
+            <div style="display:flex;gap:0.4rem">
+              <button class="btn btn-ghost btn-icon" onclick="runLearn()" style="flex:1;justify-content:center">עדכן למידה</button>
+              <button class="btn btn-ghost btn-icon" onclick="refreshAll()" style="flex:1;justify-content:center">↻ רענן</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Output -->
+      <div class="output-box" id="run-output"></div>
+    </div>
+  </div>
+
+  <!-- ── שורת פאנלים עיקריים ──────────────────────────────────── -->
+  <div class="content-grid">
+
+    <!-- מחיקות אחרונות -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">🗑️ מחיקות אחרונות
+          <span class="tag tag-blue" id="deletions-count">—</span>
+        </div>
+        <button class="btn-expand" onclick="openModal('deletions')">↗ הרחב</button>
+      </div>
+      <div class="panel-body">
+        <div class="panel-scroll" id="deletions-list" style="--panel-h:200px">
+          <div class="empty">טוען...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- סקירות SPAM -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📬 סקירות SPAM
+          <span class="tag tag-orange" id="reviews-count">—</span>
+        </div>
+        <button class="btn-expand" onclick="openModal('reviews')">↗ הרחב</button>
+      </div>
+      <div class="panel-body">
+        <div class="panel-scroll" id="reviews-list" style="--panel-h:200px">
+          <div class="empty">טוען...</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── שורה שנייה ────────────────────────────────────────────── -->
+  <div class="content-grid">
+
+    <!-- דפוסים שנלמדו -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">🧠 דפוסים שנלמדו</div>
+        <button class="btn-expand" onclick="openModal('patterns')">↗ הרחב</button>
+      </div>
+      <div class="panel-body">
+        <div class="panel-scroll" id="patterns-container" style="--panel-h:200px">
+          <div class="empty">טוען...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- לוג -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📋 לוג פעילות</div>
+        <button class="btn-expand" onclick="openModal('log')">↗ הרחב</button>
+      </div>
+      <div class="panel-body">
+        <div class="log-area" id="log-area">טרם הורצה סריקה</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── שורה שלישית ──────────────────────────────────────────── -->
+  <div class="content-grid">
+
+    <!-- היסטוריית ריצות -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📖 היסטוריית ריצות</div>
+        <button class="btn-expand" onclick="openModal('history')">↗ הרחב</button>
+      </div>
+      <div class="panel-body">
+        <div class="panel-scroll" id="history-container" style="--panel-h:180px">
+          <div class="empty">אין היסטוריה עדיין</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- תיקיות קבלות -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📂 תיקיות קבלות</div>
+        <button class="btn-expand" onclick="openModal('domains')">↗ ניהול</button>
+      </div>
+      <div class="panel-body">
+        <div class="panel-scroll" id="domain-mappings-container" style="--panel-h:180px">
+          <div class="empty">עדיין לא נוצרו תיקיות קבלות</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+// ================================================================
+//  Multi-account — חשבון פעיל
+// ================================================================
+let activeAccount = '';   // כתובת החשבון הנבחר כרגע
+
+async function loadAccounts() {
+  try {
+    const accounts = await fetch('/api/accounts').then(r => r.json());
+    const wrap = document.getElementById('account-selector-wrap');
+    const sel  = document.getElementById('account-select');
+    if (!accounts || accounts.length === 0) return;
+    if (accounts.length === 1) {
+      // חשבון יחיד — הסתר selector אבל קבע את הפעיל
+      activeAccount = accounts[0].address;
+      return;
+    }
+    // מספר חשבונות — הצג selector
+    sel.innerHTML = accounts.map(a =>
+      `<option value="${a.address}">${a.name || a.address}</option>`
+    ).join('');
+    wrap.style.display = 'flex';
+    activeAccount = accounts[0].address;
+    sel.value = activeAccount;
+  } catch(e) { console.warn('accounts', e); }
+}
+
+function onAccountChange(addr) {
+  activeAccount = addr;
+  loadFolders();
+  refreshAll();
+}
+
+// url עם פרמטר חשבון — לבקשות GET
+function apiUrl(path) {
+  return activeAccount ? `${path}?account=${encodeURIComponent(activeAccount)}` : path;
+}
+
+// ================================================================
+//  מודאלים — פתיחה/סגירה + מילוי תוכן
+// ================================================================
+let _allData = {};   // cache נתונים לכל פאנל
+
+function openModal(name) {
+  const el = document.getElementById(`modal-${name}`);
+  if (el) {
+    el.classList.add('open');
+    fillModal(name);
+  }
+}
+
+function closeModal(name) {
+  const el = document.getElementById(`modal-${name}`);
+  if (el) el.classList.remove('open');
+}
+
+// סגירה ב-Escape
+document.addEventListener('keydown', e => { if (e.key==='Escape') document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open')); });
+
+function fillModal(name) {
+  const data = _allData[name];
+  if (!data) return;
+
+  if (name === 'deletions') {
+    const el = document.getElementById('modal-deletions-body');
+    if (!data.length) { el.innerHTML='<div class="empty">אין מחיקות מתועדות עדיין</div>'; return; }
+    const validDels = data.filter(d => d.from || d.subject);
+    if (!validDels.length) { el.innerHTML='<div class="empty">אין מחיקות מתועדות</div>'; return; }
+    el.innerHTML = validDels.map(d=>`<div class="email-item" style="margin-bottom:0.4rem">
+      <div class="email-from">${d.from||'—'}</div>
+      <div class="email-subject">${d.subject||d.domain||'(ללא נושא)'}</div>
+      <div class="email-meta">${timeAgo(d.timestamp||d.deleted_at)}${d.domain?' · '+d.domain:''}</div>
+    </div>`).join('');
+  }
+
+  if (name === 'reviews') {
+    const el = document.getElementById('modal-reviews-body');
+    if (!data.length) { el.innerHTML='<div class="empty">אין סקירות עדיין</div>'; return; }
+    el.innerHTML = data.map(d=>{
+      const tag = d.decision==='moved_to_inbox'?'<span class="tag tag-green">↩ Inbox</span>'
+        : d.decision==='confirmed_spam'?'<span class="tag tag-red">ספאם</span>'
+        : '<span class="tag tag-blue">דולג</span>';
+      return `<div class="email-item" style="margin-bottom:0.4rem">
+        <div style="display:flex;justify-content:space-between"><div class="email-from">${d.from||'—'}</div>${tag}</div>
+        <div class="email-subject">${d.subject||'—'}</div>
+        <div class="email-meta">${timeAgo(d.timestamp)} · ציון: ${d.legit_score||0}</div>
+      </div>`;
+    }).join('');
+  }
+
+  if (name === 'patterns') {
+    const el  = document.getElementById('modal-patterns-body');
+    const p   = data;
+    const a   = p.auto_candidates||[], dom=p.blocked_domains||[], k=p.learned_keywords||[];
+
+    function renderSection(title, tagClass, type, items) {
+      if (!items.length) return '';
+      return `
+        <div style="margin-bottom:1.25rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+            <div class="section-label" style="margin:0">${title} (${items.length})</div>
+            <div style="display:flex;gap:0.4rem;align-items:center">
+              <label style="font-size:0.7rem;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;gap:0.3rem">
+                <input type="checkbox" id="sel-all-${type}" onchange="toggleSectionAll('${type}', this.checked)"
+                  style="accent-color:var(--accent);width:12px;height:12px"> בחר הכל
+              </label>
+              <button onclick="deleteSelected('${type}')"
+                class="btn btn-danger" style="font-size:0.68rem;padding:0.2rem 0.6rem">
+                מחק נבחרים
+              </button>
+            </div>
+          </div>
+          <div class="pattern-list" id="section-${type}">
+            ${items.map(x => {
+              const safe = x.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+              return `<div class="pattern-item" style="gap:0.5rem">
+                <input type="checkbox" class="pat-cb pat-cb-${type}" data-type="${type}" data-value="${safe}"
+                  style="accent-color:var(--accent);width:13px;height:13px;flex-shrink:0"
+                  onchange="updateSectionAllCheck('${type}')">
+                <span class="pattern-value" style="flex:1;font-size:0.72rem">${x}</span>
+                <span class="tag ${tagClass}">${type==='auto_candidates'?'כתובת':type==='blocked_domains'?'דומיין':'מילה'}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }
+
+    el.innerHTML =
+      renderSection('כתובות',      'tag-red',    'auto_candidates',  a)  +
+      renderSection('דומיינים',    'tag-orange', 'blocked_domains',  dom) +
+      renderSection('מילות מפתח', 'tag-blue',   'learned_keywords', k);
+  }
+
+  if (name === 'log') {
+    const el = document.getElementById('modal-log-body');
+    el.textContent = Array.isArray(data) ? data.join('\n') : 'אין לוג';
+  }
+
+  if (name === 'history') {
+    const el = document.getElementById('modal-history-body');
+    if (!data.length) { el.innerHTML='<div class="empty">אין היסטוריה</div>'; return; }
+    el.innerHTML=`<div style="overflow-x:auto"><table>
+      <thead><tr>${['סטטוס','תאריך','שעה','תיקיות','נסרקו','חשובים','קבלות','ניוזלטרים','מועמדים','ישנים','מסוכן','נמחקו','Sim'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${data.map((r,i)=>{
+        const done = r.completed !== false;
+        return `<tr style="${i===0?'background:rgba(79,142,247,0.05)':''}${!done?';border-right:3px solid var(--danger)':''}">
+          <td title="${done?'הושלמה':'לא הושלמה'}" style="text-align:center">${done?'<span style="color:var(--accent2)">✓</span>':'<span style="color:var(--danger);font-weight:700">⚠ לא הושלמה</span>'}</td>
+          <td style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim)">${r.date||'—'}</td>
+          <td style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim)">${r.time||'—'}</td>
+          <td style="font-size:0.68rem">${(r.folders||['INBOX']).join(', ')}</td>
+          <td>${r.total_scanned||0}</td>
+          <td style="color:var(--accent2)">${r.important||0}</td>
+          <td style="color:var(--accent3)">${r.receipts||0}</td>
+          <td style="color:var(--text-dim)">${r.newsletters||0}</td>
+          <td style="color:var(--danger)">${r.deletion_candidates||0}</td>
+          <td style="color:var(--text-dim)">${r.old_emails||0}</td>
+          <td style="color:var(--danger);font-weight:600">${(r.danger||0)+(r.warning||0)}</td>
+          <td style="color:var(--accent2);font-weight:700">${r.deleted_since_last_run||0}</td>
+          <td style="font-size:0.65rem;opacity:0.5">${r.dry_run?'Sim':''}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  }
+
+  if (name === 'domains') {
+    const el = document.getElementById('modal-domains-body');
+    const entries = Object.entries(data||{});
+    if (!entries.length) { el.innerHTML='<div class="empty">עדיין לא נוצרו תיקיות קבלות</div>'; return; }
+    el.innerHTML=`<div class="pattern-list">${entries.map(([domain,name])=>`
+      <div class="pattern-item">
+        <span class="pattern-value" style="flex:1">${domain}</span>
+        <span style="color:var(--text-dim);font-size:0.7rem">→</span>
+        <input value="${name}" data-domain="${domain}" onblur="saveDomainRename(this)"
+          style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                 padding:0.2rem 0.5rem;color:var(--text);font-size:0.78rem;width:160px;text-align:right"/>
+        <span class="tag tag-green">קבלות/${name}</span>
+      </div>`).join('')}
+    </div><div style="margin-top:0.75rem;font-size:0.72rem;color:var(--text-dim)">שני שם ולחצי Tab — ישמר</div>`;
+  }
+}
+
+// ================================================================
+//  SSE — עדכונים בזמן אמת
+// ================================================================
+let _isRunning = false;
+
+function connectSSE() {
+  const es = new EventSource('/api/events');
+  es.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.type === 'ping' || d.type === 'connected') return;
+      if (d.type === 'log_line') appendLiveLine(d.line);
+      if (d.type === 'run_started')  { setRunning(true);  showToast(d.message,'info'); }
+      if (d.type === 'run_complete') { setRunning(false); showToast(d.message,'success'); setTimeout(refreshAll,800); }
+      if (d.type === 'run_error')    { setRunning(false); showToast('שגיאה: '+d.message,'error'); }
+    } catch(_) {}
+  };
+  es.onerror = () => setTimeout(connectSSE, 3000);
+}
+
+const _liveLines = [];
+function appendLiveLine(line) {
+  _liveLines.unshift(line);
+  if (_liveLines.length > 80) _liveLines.pop();
+  const el = document.getElementById('log-area');
+  if (el) el.textContent = _liveLines.join('\n');
+}
+
+function setRunning(running) {
+  _isRunning = running;
+  document.getElementById('btn-run').style.display  = running ? 'none'  : '';
+  document.getElementById('btn-stop').style.display = running ? '' : 'none';
+  document.querySelectorAll('.btn:not(#btn-stop)').forEach(b => b.disabled = running);
+}
+
+function showToast(msg, type='info') {
+  const c = {success:'var(--accent2)', info:'var(--accent)', error:'var(--danger)'};
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = `position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);
+    background:${c[type]};color:#000;padding:0.6rem 1.2rem;border-radius:8px;
+    font-size:0.82rem;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.4)`;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ================================================================
+//  עזר
+// ================================================================
+async function fetchJSON(url) {
+  const fullUrl = url.startsWith('/api/') ? apiUrl(url) : url;
+  const r = await fetch(fullUrl);
+  if (!r.ok) throw new Error(`${r.status} ${fullUrl}`);
+  return r.json();
+}
+
+function timeAgo(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts), diff = Math.floor((Date.now()-d)/1000);
+  if (diff < 60)    return `לפני ${diff}ש`;
+  if (diff < 3600)  return `לפני ${Math.floor(diff/60)}ד`;
+  if (diff < 86400) return `לפני ${Math.floor(diff/3600)}ש`;
+  return d.toLocaleDateString('he-IL');
+}
+
+// ================================================================
+//  תיקיות — היררכיה עם הרחבה/כיווץ + חיפוש
+// ================================================================
+let _allFolders = [];
+
+function buildTree(folders) {
+  const map = {}, roots = [];
+  folders.forEach(f => {
+    const parts = f.name.split('/');
+    f._label  = parts[parts.length-1];
+    f._depth  = parts.length-1;
+    f._parent = parts.slice(0,-1).join('/');
+    f._children = [];
+    map[f.name] = f;
+  });
+  folders.forEach(f => {
+    if (f._depth > 0 && map[f._parent]) map[f._parent]._children.push(f);
+    else roots.push(f);
+  });
+  roots.sort((a,b)=> (a.type==='system'?0:1)-(b.type==='system'?0:1)||a.name.localeCompare(b.name,'he'));
+  roots.forEach(r => r._children.sort((a,b)=>a.name.localeCompare(b.name,'he')));
+  return roots;
+}
+
+function renderFolderNode(f, saved, collapsed, searchTerm) {
+  const hasKids  = f._children.length > 0;
+  const isMatch  = !searchTerm || f.name.toLowerCase().includes(searchTerm) || f._label.toLowerCase().includes(searchTerm);
+  const kidMatch = f._children.some(c => c.name.toLowerCase().includes(searchTerm||''));
+  if (searchTerm && !isMatch && !kidMatch) return '';
+
+  const checked   = saved.includes(f.id) ? 'checked' : '';
+  const isCollapsed = collapsed.has(f.name) && !searchTerm;
+  const indent    = f._depth * 16;
+  const arrow     = hasKids ? (isCollapsed ? '▶' : '▼') : '·';
+  const arrowClick= hasKids ? `onclick="toggleCollapse('${f.name.replace(/'/g,"\'")}')"` : '';
+
+  let html = `<div class="folder-row" style="padding-right:${indent}px">
+    <span class="folder-arrow" ${arrowClick} style="cursor:${hasKids?'pointer':'default'};opacity:${hasKids?1:0.3};color:var(--accent);font-size:0.65rem;margin-left:4px;user-select:none">${arrow}</span>
+    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;flex:1;font-size:0.8rem;
+      ${f.type==='system'?'font-weight:600;color:var(--accent)':''}">
+      <input type="checkbox" value="${f.id}" data-name="${f.name}" ${checked}
+        onchange="saveFolderSelection()"
+        style="accent-color:var(--accent);width:13px;height:13px;flex-shrink:0">
+      <span>${f._label}</span>
+      ${f.type==='system'?'<span style="font-size:0.6rem;opacity:0.5;margin-right:2px">sys</span>':''}
+    </label>
+  </div>`;
+
+  if (hasKids && !isCollapsed) {
+    f._children.forEach(c => { html += renderFolderNode(c, saved, collapsed, searchTerm); });
+  }
+  return html;
+}
+
+const _collapsed = new Set();   // תיקיות מכווצות
+
+function toggleCollapse(name) {
+  if (_collapsed.has(name)) _collapsed.delete(name);
+  else _collapsed.add(name);
+  renderFolderList(document.getElementById('folder-search').value.trim().toLowerCase());
+}
+
+function renderFolderList(searchTerm='') {
+  const el    = document.getElementById('folders-list');
+  const saved = JSON.parse(localStorage.getItem('selected_folders')||'["INBOX"]');
+  const roots = buildTree([..._allFolders]);
+  let html = '';
+  roots.forEach(f => { html += renderFolderNode(f, saved, _collapsed, searchTerm); });
+  el.innerHTML = html || '<div class="empty" style="padding:0.5rem">לא נמצאו תיקיות</div>';
+  updateSelectAll();
+}
+
+async function loadFolders() {
+  const el = document.getElementById('folders-list');
+  el.innerHTML = '<div class="empty" style="padding:0.5rem">טוען...</div>';
+  try {
+    _allFolders = await fetchJSON('/api/folders');
+    // כווץ כל תיקיות משתמש כברירת מחדל
+    _allFolders.forEach(f => { if (f.type==='user' && f.name.includes('/')) _collapsed.add(f._parent||f.name); });
+    renderFolderList();
+  } catch(e) {
+    el.innerHTML = `<div class="empty" style="color:var(--danger)">${e.message}</div>`;
+  }
+}
+
+function saveFolderSelection() {
+  const sel = [...document.querySelectorAll('#folders-list input:checked')].map(i=>i.value);
+  localStorage.setItem('selected_folders', JSON.stringify(sel));
+  updateSelectAll();
+}
+
+function toggleAllFolders(checked) {
+  document.querySelectorAll('#folders-list input[type=checkbox]').forEach(cb => cb.checked=checked);
+  saveFolderSelection();
+}
+
+function updateSelectAll() {
+  const all  = document.querySelectorAll('#folders-list input[type=checkbox]');
+  const chkd = document.querySelectorAll('#folders-list input:checked');
+  const sa   = document.getElementById('select-all-folders');
+  if (!sa || !all.length) return;
+  sa.checked       = chkd.length === all.length;
+  sa.indeterminate = chkd.length > 0 && chkd.length < all.length;
+}
+
+function getSelectedFolders() {
+  const sel = [...document.querySelectorAll('#folders-list input:checked')].map(i=>i.value);
+  return sel.length ? sel : ['INBOX'];
+}
+
+// ================================================================
+//  סטטיסטיקות
+// ================================================================
+async function loadStats() {
+  try {
+    const s = await fetchJSON('/api/stats');
+    document.getElementById('stat-deletions').textContent = s.total_deletions ?? 0;
+    document.getElementById('stat-patterns').textContent  =
+      (s.learned_addresses||0)+(s.learned_domains||0)+(s.learned_keywords||0);
+    document.getElementById('stat-inbox').textContent = s.moved_to_inbox ?? 0;
+    document.getElementById('stat-spam').textContent  = s.confirmed_spam  ?? 0;
+    document.getElementById('last-refresh').textContent = 'עודכן: '+new Date().toLocaleTimeString('he-IL');
+  } catch(e) { console.error('stats',e); }
+}
+
+async function loadDeletions() {
+  try {
+    const data = await fetchJSON('/api/recent-deletions');
+    _allData['deletions'] = data;
+    document.getElementById('deletions-count').textContent = data.length;
+    const el = document.getElementById('deletions-list');
+    // סנן שורות ריקות (from וsubject שניהם ריקים)
+    const validData = data.filter(d => d.from || d.subject);
+    const preview   = validData.slice(0, 7);
+    if (!preview.length) { el.innerHTML='<div class="empty">אין מחיקות עדיין<br><small>לחצי "למד מתיקיית המועמדים"</small></div>'; return; };
+
+    if (!preview.length) {
+      el.innerHTML = '<div class="empty">אין מחיקות מתועדות עדיין<br><small>לחצי "למד מתיקיית המועמדים"</small></div>';
+      return;
+    }
+
+    el.innerHTML = preview.map(d=>`<div class="email-item">
+      <div class="email-from">${d.from||'—'}</div>
+      <div class="email-subject">${d.subject||d.domain||'(ללא נושא)'}</div>
+      <div class="email-meta">${timeAgo(d.timestamp||d.deleted_at)}${d.domain?' · '+d.domain:''}</div>
+    </div>`).join('') + (validData.length>7?`<div style="text-align:center;padding:0.4rem;font-size:0.68rem;color:var(--text-dim)">+ ${validData.length-7} נוספות — לחצי ↗ הרחב</div>`:'');
+  } catch(e) { console.error('deletions',e); }
+}
+
+async function loadReviews() {
+  try {
+    const data = await fetchJSON('/api/spam-reviews');
+    _allData['reviews'] = data;
+    document.getElementById('reviews-count').textContent = data.length;
+    const el = document.getElementById('reviews-list');
+    const preview = data.slice(0,7);
+    if (!preview.length) { el.innerHTML='<div class="empty">אין סקירות SPAM עדיין</div>'; return; }
+    el.innerHTML = preview.map(d=>{
+      const tag = d.decision==='moved_to_inbox'?'<span class="tag tag-green">↩</span>'
+        : d.decision==='confirmed_spam'?'<span class="tag tag-red">ספאם</span>'
+        : '<span class="tag tag-blue">דולג</span>';
+      return `<div class="email-item">
+        <div style="display:flex;justify-content:space-between"><div class="email-from">${d.from||'—'}</div>${tag}</div>
+        <div class="email-subject">${d.subject||'—'}</div>
+        <div class="email-meta">${timeAgo(d.timestamp)}</div>
+      </div>`;
+    }).join('') + (data.length>7?`<div style="text-align:center;padding:0.4rem;font-size:0.68rem;color:var(--text-dim)">+ ${data.length-7} נוספות ↗</div>`:'');
+  } catch(e) { console.error('reviews',e); }
+}
+
+async function loadPatterns() {
+  try {
+    const p  = await fetchJSON('/api/patterns');
+    _allData['patterns'] = p;
+    const el = document.getElementById('patterns-container');
+    const a  = p.auto_candidates||[], dom=p.blocked_domains||[], k=p.learned_keywords||[];
+    if (!a.length && !dom.length && !k.length) {
+      el.innerHTML='<div class="empty">אין דפוסים עדיין<br><small>לחצי "למד מתיקיית המועמדים"</small></div>';
+      return;
+    }
+    // Preview — תצוגה קומפקטית בפאנל
+    let html = `<div style="font-size:0.7rem;color:var(--accent2);margin-bottom:0.5rem">${p.summary||''}</div>`;
+    const allKw = k.slice(0,12);
+    if (allKw.length) html += `<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.4rem">${allKw.map(x=>`<span class="tag tag-blue" style="font-size:0.65rem">${x}</span>`).join('')}</div>`;
+    const totalItems = a.length + dom.length + k.length;
+    if (totalItems > 12) html += `<div style="font-size:0.65rem;color:var(--text-dim);margin-top:0.3rem">לחצי ↗ הרחב לניהול מלא (${totalItems} דפוסים)</div>`;
+    el.innerHTML = html;
+  } catch(e) { console.error('patterns',e); }
+}
+
+async function loadLog() {
+  try {
+    const data  = await fetchJSON('/api/log');
+    const lines = data.lines||[];
+    _allData['log'] = lines;
+    const el    = document.getElementById('log-area');
+    el.textContent = lines.length ? lines.slice(0,20).join('\n') : 'טרם הורצה סריקה';
+  } catch(e) { console.error('log',e); }
+}
+
+async function loadHistory() {
+  try {
+    const data = await fetchJSON('/api/history');
+    _allData['history'] = data;
+    const el   = document.getElementById('history-container');
+    if (!data.length) { el.innerHTML='<div class="empty">אין היסטוריה עדיין</div>'; return; }
+    const preview = data.slice(0,5);
+    el.innerHTML=`<div style="overflow-x:auto"><table>
+      <thead><tr>${['','תאריך','שעה','נסרקו','מועמדים','ישנים','מסוכן','נמחקו'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${preview.map((r,i)=>{
+        const done = r.completed !== false;
+        return `<tr style="${i===0?'background:rgba(79,142,247,0.05)':''}${!done?';border-right:3px solid var(--danger)':''}">
+          <td style="text-align:center" title="${done?'הושלמה':'לא הושלמה'}">${done?'<span style="color:var(--accent2);font-size:0.7rem">✓</span>':'<span style="color:var(--danger);font-size:0.7rem">⚠</span>'}</td>
+          <td style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim)">${r.date||'—'}</td>
+          <td style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim)">${r.time||'—'}</td>
+          <td>${r.total_scanned||0}</td>
+          <td style="color:var(--danger)">${r.deletion_candidates||0}</td>
+          <td style="color:var(--text-dim)">${r.old_emails||0}</td>
+          <td style="color:var(--danger)">${(r.danger||0)+(r.warning||0)}</td>
+          <td style="color:var(--accent2);font-weight:700">${r.deleted_since_last_run||0}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>` + (data.length>5?`<div style="text-align:center;padding:0.35rem;font-size:0.68rem;color:var(--text-dim)">+ ${data.length-5} ריצות נוספות ↗</div>`:'');
+  } catch(e) { console.error('history',e); }
+}
+
+async function loadScannedCount() {
+  try {
+    const d = await fetchJSON('/api/scanned-ids');
+    document.getElementById('scanned-count-label').textContent =
+      (d.count||0)>0 ? `${d.count} מיילים נסרקו עד כה` : 'טרם נסרקו מיילים';
+  } catch(e) {}
+
+  try {
+    const p    = await fetchJSON('/api/protected-emails');
+    const lbl  = document.getElementById('protected-count-label');
+    const btn  = document.getElementById('btn-clear-protected');
+    const cnt  = p.count || 0;
+    if (lbl) lbl.textContent = cnt > 0 ? `${cnt} מיילים מוגנים מסריקה חוזרת` : '';
+    if (btn) btn.style.display = cnt > 0 ? 'block' : 'none';
+  } catch(e) {}
+}
+
+async function clearProtected() {
+  if (!confirm('לאפס את רשימת המוגנים?\nמיילים שהוצאת מהתיקייה עלולים לחזור בסריקה הבאה.')) return;
+  await fetch(apiUrl('/api/protected-emails/clear'), {method: 'POST'});
+  showToast('רשימת המוגנים אופסה', 'info');
+  await loadScannedCount();
+}
+
+async function loadDomainMappings() {
+  try {
+    const data    = await fetchJSON('/api/domain-names');
+    const el      = document.getElementById('domain-mappings-container');
+    const entries = Object.entries(data);
+    if (!entries.length) { el.innerHTML='<div class="empty">עדיין לא נוצרו תיקיות קבלות</div>'; return; }
+    el.innerHTML=`<div class="pattern-list">${entries.map(([domain,name])=>`
+      <div class="pattern-item" style="gap:0.6rem">
+        <span class="pattern-value" style="flex:1;font-size:0.7rem">${domain}</span>
+        <span style="color:var(--text-dim);font-size:0.7rem">→</span>
+        <input value="${name}" data-domain="${domain}" onblur="saveDomainRename(this)"
+          style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                 padding:0.2rem 0.4rem;color:var(--text);font-size:0.75rem;width:130px;text-align:right"/>
+        <span class="tag tag-green" style="font-size:0.65rem">קבלות/${name}</span>
+      </div>`).join('')}</div>
+    <div style="margin-top:0.5rem;font-size:0.68rem;color:var(--text-dim)">שני שם ולחצי Tab — ישמר</div>`;
+  } catch(e) { console.error('domains',e); }
+}
+
+async function saveDomainRename(input) {
+  const domain = input.dataset.domain, name = input.value.trim();
+  if (!name) return;
+  await fetch(apiUrl('/api/domain-names'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domain,new_name:name,account:activeAccount})});
+  await loadDomainMappings();
+}
+
+// ================================================================
+//  פעולות
+// ================================================================
+function toggleScanAll(checked) {
+  const slider = document.getElementById('batch-max');
+  const label  = document.getElementById('batch-max-label');
+  const note   = document.getElementById('scan-all-note');
+  if (checked) {
+    slider.disabled = true;
+    slider.style.opacity = '0.3';
+    label.textContent = '∞';
+    note.style.display = 'block';
+  } else {
+    slider.disabled = false;
+    slider.style.opacity = '1';
+    label.textContent = slider.value;
+    note.style.display = 'none';
+  }
+}
+
+async function runCleaner(dryRun) {
+  const folders = getSelectedFolders();
+  if (!folders.length) { showToast('בחרי לפחות תיקייה אחת','error'); return; }
+  const order     = document.querySelector('input[name="scan-order"]:checked')?.value||'newest';
+  const readF     = document.querySelector('input[name="read-filter"]:checked')?.value||'all';
+  const rescan    = document.getElementById('rescan-checkbox').checked;
+  const scanAll   = document.getElementById('scan-all-toggle')?.checked || false;
+  const max       = scanAll ? -1 : (parseInt(document.getElementById('batch-max').value)||50);
+  const output    = document.getElementById('run-output');
+  output.textContent = 'מחכה לתגובה...';
+  output.classList.add('visible');
+  _liveLines.length = 0;
+  try {
+    const r = await fetch('/api/run',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({dry_run:dryRun,folders,order,rescan,max_emails:max,read_filter:readF,scan_all:scanAll,account:activeAccount})
+    });
+    const d = await r.json();
+    if (!d.success) output.textContent = d.message||'שגיאה';
+  } catch(e) { showToast('שגיאה: '+e.message,'error'); }
+}
+
+async function stopCleaner() {
+  await fetch('/api/stop',{method:'POST'});
+  showToast('מפסיק תהליך...','info');
+}
+
+async function runLearn() {
+  const output = document.getElementById('run-output');
+  output.textContent = 'מעדכן למידה...';
+  output.classList.add('visible');
+  try {
+    const r = await fetch('/api/run-learn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:activeAccount})});
+    const d = await r.json();
+    output.textContent = d.output||'הסתיים';
+    await refreshAll();
+  } catch(e) { output.textContent='שגיאה: '+e.message; }
+}
+
+async function learnFromFolder() {
+  const output = document.getElementById('run-output');
+  output.textContent = 'קורא תיקיית מועמדים...';
+  output.classList.add('visible');
+  try {
+    const r = await fetch(apiUrl('/api/learn-from-folder'),{method:'POST'});
+    const d = await r.json();
+    output.textContent = d.output||'הסתיים';
+    await refreshAll();
+  } catch(e) { output.textContent='שגיאה: '+e.message; }
+}
+
+// ================================================================
+//  ניהול דפוסי למידה — מחיקה יחידנית ומרובה
+// ================================================================
+
+// בחר/בטל הכל בקטגוריה
+function toggleSectionAll(type, checked) {
+  document.querySelectorAll(`.pat-cb-${type}`).forEach(cb => cb.checked = checked);
+}
+
+// עדכן את checkbox "בחר הכל" לפי מצב הפרטים
+function updateSectionAllCheck(type) {
+  const all  = document.querySelectorAll(`.pat-cb-${type}`);
+  const chkd = document.querySelectorAll(`.pat-cb-${type}:checked`);
+  const sa   = document.getElementById(`sel-all-${type}`);
+  if (!sa) return;
+  sa.checked       = chkd.length === all.length && all.length > 0;
+  sa.indeterminate = chkd.length > 0 && chkd.length < all.length;
+}
+
+// מחיקת כל הנבחרים בקטגוריה
+async function deleteSelected(type) {
+  const checked = [...document.querySelectorAll(`.pat-cb-${type}:checked`)];
+  if (!checked.length) { showToast('לא נבחרו פריטים', 'info'); return; }
+
+  const values = checked.map(cb => cb.dataset.value);
+  const confirm_msg = values.length === 1
+    ? `למחוק "${values[0]}" מהלמידה?`
+    : `למחוק ${values.length} פריטים מהלמידה?`;
+  if (!confirm(confirm_msg)) return;
+
+  try {
+    const r = await fetch(apiUrl('/api/patterns/delete-bulk'), {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({type, values})
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast(`נמחקו ${d.removed} פריטים`, 'success');
+      // עדכן נתונים וצייר מחדש
+      const fresh = await fetchJSON('/api/patterns');
+      _allData['patterns'] = fresh;
+      await loadPatterns();
+      fillModal('patterns');
+    } else {
+      showToast(d.error || 'שגיאה', 'error');
+    }
+  } catch(e) {
+    showToast('שגיאה: ' + e.message, 'error');
+  }
+}
+
+// מחיקה יחידנית (נשאר לתאימות)
+async function deletePattern(type, value) {
+  await deleteSelected_single(type, value);
+}
+
+async function deleteSelected_single(type, value) {
+  if (!confirm(`למחוק "${value}" מהלמידה?`)) return;
+  try {
+    const r = await fetch(apiUrl('/api/patterns/delete'), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({type, value})
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast(`נמחק: ${value}`, 'success');
+      const fresh = await fetchJSON('/api/patterns');
+      _allData['patterns'] = fresh;
+      await loadPatterns();
+      fillModal('patterns');
+    } else {
+      showToast(d.error || 'שגיאה', 'error');
+    }
+  } catch(e) {
+    showToast('שגיאה: ' + e.message, 'error');
+  }
+}
+
+// ================================================================
+//  סקירת SPAM דרך הדשבורד
+// ================================================================
+async function openSpamReview() {
+  openModal('spam-review');
+  const body = document.getElementById('modal-spam-body');
+  body.innerHTML = '<div class="empty">סורק תיקיית SPAM... זה עשוי לקחת כ-20 שניות</div>';
+
+  try {
+    const r    = await fetch(apiUrl('/api/spam-scan'), {method:'POST'});
+    const data = await r.json();
+
+    if (!data.success) {
+      body.innerHTML = `<div class="empty" style="color:var(--danger)">שגיאה: ${data.error}</div>`;
+      return;
+    }
+    if (!data.emails || !data.emails.length) {
+      body.innerHTML = '<div class="empty">לא נמצאו מיילים לגיטימיים בתיקיית SPAM 👍<br><small>כל המיילים שם הם ספאם אמיתי</small></div>';
+      return;
+    }
+
+    body.innerHTML = `
+      <div style="margin-bottom:1rem;font-size:0.8rem;color:var(--accent2)">
+        נמצאו ${data.emails.length} מיילים שעלולים להיות לגיטימיים:
+      </div>
+      <div id="spam-review-list">
+        ${data.emails.map(email => renderSpamCard(email)).join('')}
+      </div>`;
+  } catch(e) {
+    body.innerHTML = `<div class="empty" style="color:var(--danger)">שגיאה: ${e.message}</div>`;
+  }
+}
+
+function renderSpamCard(email) {
+  const scoreColor = email.score >= 8 ? 'var(--accent2)' : email.score >= 4 ? 'var(--accent3)' : 'var(--text-dim)';
+  const reasons    = (email.reasons || []).join(' · ');
+  return `<div id="spam-card-${email.id}" style="background:var(--surface2);border:1px solid var(--border);
+    border-radius:10px;padding:0.85rem 1rem;margin-bottom:0.75rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem">
+      <div style="flex:1">
+        <div style="font-size:0.78rem;color:var(--accent);font-weight:600;margin-bottom:0.15rem">${email.from}</div>
+        <div style="font-size:0.82rem;margin-bottom:0.2rem">${email.subject}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim)">${email.snippet||''}</div>
+      </div>
+      <div style="text-align:left;padding-right:0.75rem;flex-shrink:0">
+        <div style="font-size:1.1rem;font-weight:900;font-family:var(--mono);color:${scoreColor}">${email.score}</div>
+        <div style="font-size:0.6rem;color:var(--text-dim)">ציון</div>
+      </div>
+    </div>
+    ${reasons ? `<div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:0.6rem;line-height:1.5">${reasons}</div>` : ''}
+    <div style="display:flex;gap:0.5rem">
+      <button onclick="spamDecision('${email.id}', 'moved_to_inbox', this)"
+        class="btn btn-success" style="font-size:0.75rem;padding:0.35rem 0.7rem">
+        ↩ החזר ל-Inbox
+      </button>
+      <button onclick="spamDecision('${email.id}', 'confirmed_spam', this)"
+        class="btn btn-danger" style="font-size:0.75rem;padding:0.35rem 0.7rem;background:rgba(247,95,79,0.15);color:var(--danger);border:1px solid rgba(247,95,79,0.3)">
+        🚫 ספאם ודאי
+      </button>
+      <button onclick="spamDecision('${email.id}', 'skipped', this)"
+        class="btn btn-ghost" style="font-size:0.75rem;padding:0.35rem 0.7rem">
+        ⏭ דלג
+      </button>
+    </div>
+  </div>`;
+}
+
+async function spamDecision(emailId, decision, btn) {
+  // מצא את המייל מהנתונים
+  const card  = document.getElementById(`spam-card-${emailId}`);
+  const label = {'moved_to_inbox':'הועבר ל-Inbox ✓','confirmed_spam':'אושר כספאם ✓','skipped':'דולג'};
+  const color = {'moved_to_inbox':'var(--accent2)','confirmed_spam':'var(--danger)','skipped':'var(--text-dim)'};
+
+  // מצא פרטי מייל מה-DOM
+  const emailObj = {
+    id:      emailId,
+    from:    card.querySelector('[style*="color:var(--accent)"]')?.textContent || '',
+    subject: card.querySelectorAll('div > div')[1]?.textContent || '',
+    legit_score: parseInt(card.querySelector('[style*="font-size:1.1rem"]')?.textContent || '0'),
+  };
+
+  // נטרל כפתורים
+  card.querySelectorAll('button').forEach(b => b.disabled = true);
+
+  try {
+    const r = await fetch(apiUrl('/api/spam-decision'), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({id: emailId, decision, email: emailObj})
+    });
+    const d = await r.json();
+
+    // הצג תוצאה על הכרטיס
+    const btns = card.querySelector('[style*="display:flex;gap"]');
+    if (btns) btns.innerHTML = `<span style="font-size:0.78rem;font-weight:600;color:${color[decision]}">${label[decision]}</span>`;
+    card.style.opacity = '0.6';
+
+    // עדכן סטטיסטיקות
+    setTimeout(loadStats, 500);
+  } catch(e) {
+    card.querySelectorAll('button').forEach(b => b.disabled = false);
+    showToast('שגיאה: ' + e.message, 'error');
+  }
+}
+
+// ================================================================
+//  טאבים של דפוסים
+// ================================================================
+async function showPatternTab(tab) {
+  // סמן טאב פעיל
+  ['learned','sender','blacklist','never'].forEach(t => {
+    const btn = document.getElementById(`tab-${t}`);
+    if (btn) {
+      btn.className = t===tab ? 'btn btn-primary btn-icon' : 'btn btn-ghost btn-icon';
+      btn.style.fontSize = '0.75rem';
+    }
+  });
+
+  const container = document.getElementById('patterns-tab-content');
+  if (!container) return;
+
+  if (tab === 'learned') {
+    const p = window._patternData || {};
+    const a = p.auto_candidates||[], dom=p.blocked_domains||[], k=p.learned_keywords||[];
+    function renderSection(title, tagClass, type, items) {
+      if (!items.length) return '';
+      return `<div style="margin-bottom:1.25rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+          <div class="section-label" style="margin:0">${title} (${items.length})</div>
+          <div style="display:flex;gap:0.4rem;align-items:center">
+            <label style="font-size:0.7rem;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;gap:0.3rem">
+              <input type="checkbox" id="sel-all-${type}" onchange="toggleSectionAll('${type}', this.checked)"
+                style="accent-color:var(--accent);width:12px;height:12px"> בחר הכל
+            </label>
+            <button onclick="deleteSelected('${type}')" class="btn btn-danger" style="font-size:0.68rem;padding:0.2rem 0.6rem">מחק נבחרים</button>
+          </div>
+        </div>
+        <div class="pattern-list">
+          ${items.map(x => {
+            const safe = x.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+            return `<div class="pattern-item" style="gap:0.5rem">
+              <input type="checkbox" class="pat-cb pat-cb-${type}" data-type="${type}" data-value="${safe}"
+                style="accent-color:var(--accent);width:13px;height:13px;flex-shrink:0"
+                onchange="updateSectionAllCheck('${type}')">
+              <span class="pattern-value" style="flex:1;font-size:0.72rem">${x}</span>
+              <span class="tag ${tagClass}">${type==='auto_candidates'?'כתובת':type==='blocked_domains'?'דומיין':'מילה'}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+    container.innerHTML = (!a.length && !dom.length && !k.length)
+      ? '<div class="empty">אין דפוסים עדיין</div>'
+      : renderSection('כתובות','tag-red','auto_candidates',a) +
+        renderSection('דומיינים','tag-orange','blocked_domains',dom) +
+        renderSection('מילות מפתח','tag-blue','learned_keywords',k);
+  }
+
+  if (tab === 'sender') {
+    container.innerHTML = '<div class="empty" style="padding:0.5rem">טוען...</div>';
+    try {
+      const data = await fetchJSON('/api/sender-rules');
+      if (!data.length) { container.innerHTML='<div class="empty">אין כללי שולח עדיין<br><small>יווצרו אחרי שתבחרי החלטות בסקירת SPAM</small></div>'; return; }
+      container.innerHTML = `<div class="pattern-list">${data.map(r=>`
+        <div class="pattern-item" style="flex-direction:column;align-items:flex-start;gap:0.35rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+            <span style="font-family:var(--mono);font-size:0.72rem;font-weight:600">${r.domain}</span>
+            <span class="tag tag-blue">${r.count} מיילים</span>
+          </div>
+          ${r.important.length?`<div style="font-size:0.7rem"><span style="color:var(--accent2)">✓ חשוב אם:</span> ${r.important.slice(0,5).map(k=>`<span class="tag tag-green" style="font-size:0.62rem">${k}</span>`).join(' ')}</div>`:''}
+          ${r.spam.length?`<div style="font-size:0.7rem"><span style="color:var(--danger)">✗ ספאם אם:</span> ${r.spam.slice(0,5).map(k=>`<span class="tag tag-red" style="font-size:0.62rem">${k}</span>`).join(' ')}</div>`:''}
+        </div>`).join('')}</div>`;
+    } catch(e) { container.innerHTML=`<div class="empty" style="color:var(--danger)">${e.message}</div>`; }
+  }
+
+  if (tab === 'blacklist') {
+    container.innerHTML = '<div class="empty" style="padding:0.5rem">טוען...</div>';
+    try {
+      const data = await fetchJSON('/api/spam-blacklist');
+      const addrs = data.addresses||[], doms = data.domains||[];
+      if (!addrs.length && !doms.length) { container.innerHTML='<div class="empty">הרשימה השחורה ריקה<br><small>תתאכלס כשתאשרי מיילים כספאם בסקירה</small></div>'; return; }
+      container.innerHTML =
+        (addrs.length ? `<div class="section-label" style="margin-bottom:0.5rem">כתובות חסומות (${addrs.length})</div>
+          <div class="pattern-list" style="margin-bottom:1rem">${addrs.map(a=>`<div class="pattern-item"><span class="pattern-value" style="flex:1;font-size:0.7rem">${a}</span><span class="tag tag-red">חסום</span></div>`).join('')}</div>` : '') +
+        (doms.length  ? `<div class="section-label" style="margin-bottom:0.5rem">דומיינים חסומים (${doms.length})</div>
+          <div class="pattern-list">${doms.map(d=>`<div class="pattern-item"><span class="pattern-value" style="flex:1">${d}</span><span class="tag tag-red">חסום</span></div>`).join('')}</div>` : '');
+    } catch(e) { container.innerHTML=`<div class="empty" style="color:var(--danger)">${e.message}</div>`; }
+  }
+
+  if (tab === 'never') {
+    container.innerHTML = '<div class="empty" style="padding:0.5rem">טוען...</div>';
+    try {
+      const data = await fetchJSON('/api/never-learn');
+      const addrs = data.addresses||[], doms=data.domains||[], kws=data.keywords||[];
+      if (!addrs.length && !doms.length && !kws.length) { container.innerHTML='<div class="empty">הרשימה ריקה<br><small>תתאכלס כשתמחקי דפוסים מהלמידה</small></div>'; return; }
+      container.innerHTML =
+        (addrs.length ? `<div class="section-label" style="margin-bottom:0.5rem">כתובות (${addrs.length})</div><div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.75rem">${addrs.map(a=>`<span class="tag tag-red">${a}</span>`).join('')}</div>` : '') +
+        (doms.length  ? `<div class="section-label" style="margin-bottom:0.5rem">דומיינים (${doms.length})</div><div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.75rem">${doms.map(d=>`<span class="tag tag-orange">${d}</span>`).join('')}</div>` : '') +
+        (kws.length   ? `<div class="section-label" style="margin-bottom:0.5rem">מילות מפתח (${kws.length})</div><div style="display:flex;flex-wrap:wrap;gap:0.3rem">${kws.map(k=>`<span class="tag tag-blue">${k}</span>`).join('')}</div>` : '');
+    } catch(e) { container.innerHTML=`<div class="empty" style="color:var(--danger)">${e.message}</div>`; }
+  }
+}
+
+// ================================================================
+//  רענון
+// ================================================================
+async function refreshAll() {
+  await Promise.allSettled([
+    loadStats(), loadDeletions(), loadReviews(), loadPatterns(),
+    loadLog(), loadDomainMappings(), loadHistory(), loadScannedCount()
+  ]);
+}
+
+// ================================================================
+//  אתחול
+// ================================================================
+connectSSE();
+loadAccounts().then(() => { loadFolders(); refreshAll(); });
+setInterval(refreshAll, 30000);
+</script>
+
+</body>
+</html>

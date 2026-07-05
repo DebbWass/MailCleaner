@@ -1,0 +1,27 @@
+# MailCleaner - Requirements
+# התקנה: pip install -r requirements.txt
+
+# --- Gmail API ---
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+google-api-python-client>=2.0.0
+
+# --- IMAP (גיבוי) ---
+imaplib2>=3.6
+
+# --- לוח זמנים אוטומטי ---
+schedule>=1.2.0
+
+# --- הגדרות ---
+pyyaml>=6.0
+
+# --- תצוגה יפה בטרמינל ---
+rich>=13.0.0
+
+# --- עבודה עם תאריכים ---
+python-dateutil>=2.8.0
+
+# --- שליחת בקשות HTTP (לUnsubscribe) ---
+requests>=2.31.0
+beautifulsoup4>=4.12.0
