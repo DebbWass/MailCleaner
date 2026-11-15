@@ -59,13 +59,16 @@ def load_config() -> dict:
 #  התחברות per-account                                                 #
 # ------------------------------------------------------------------ #
 
-def connect_account(account_cfg: dict):
-    """מתחבר לחשבון Gmail ספציפי לפי הגדרות account_cfg."""
+def connect_account(account_cfg: dict, interactive: bool = True):
+    """
+    מתחבר לחשבון Gmail ספציפי לפי הגדרות account_cfg.
+    interactive=False (ריצה אוטומטית) → לא ייפתח דפדפן אם הטוקן פג.
+    """
     primary = account_cfg.get("connection", {}).get("primary", "gmail_api")
 
     if primary == "gmail_api":
         client = GmailAPIClient(token_file=account_cfg.get("token_file"))
-        if client.connect():
+        if client.connect(interactive=interactive):
             return client, "gmail_api"
         else:
             console.print("[yellow]⚠️ Gmail API נכשל — עובר ל-IMAP...[/yellow]")
@@ -336,7 +339,9 @@ def run_account(account_cfg: dict, global_config: dict, args) -> dict:
 
     method = "unknown"
     try:
-        client, method = connect_account(account_cfg)
+        # ריצה אוטומטית (scheduler/weekly) לא פותחת דפדפן; ריצה ידנית כן
+        interactive = getattr(args, "mode", "manual") != "auto"
+        client, method = connect_account(account_cfg, interactive=interactive)
         console.print(f"[green]מחובר דרך: {method}[/green]")
     except ConnectionError as e:
         console.print(f"[red]{e}[/red]")

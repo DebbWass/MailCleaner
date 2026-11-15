@@ -27,20 +27,50 @@ def _read(path):
         return ""
 
 
+def _config():
+    try:
+        return yaml.safe_load((BASE / "config.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+
+def _data_dirs():
+    """
+    כל תיקיות הנתונים שמהן יש לאסוף — תיקייה לכל חשבון (logs/<כתובת>/)
+    וגם logs/ עצמה לתאימות לאחור.
+    הנתונים נכתבים per-account, ולכן קריאה מ-logs/ בלבד הייתה מפספסת ריצות.
+    """
+    dirs = []
+    try:
+        sys.path.insert(0, str(BASE))
+        from account_config import load_accounts
+        for acc in load_accounts(_config()):
+            d = LOGS / acc["address"]
+            if d.exists():
+                dirs.append(d)
+    except Exception:
+        pass
+    if (LOGS / "run_history.jsonl").exists() and LOGS not in dirs:
+        dirs.append(LOGS)   # נתוני שורש ישנים
+    return dirs or [LOGS]
+
+
 def load_runs():
-    """ריצות מהשבוע האחרון מתוך run_history.jsonl"""
+    """ריצות מהשבוע האחרון מכל החשבונות (run_history.jsonl per-account)"""
     cutoff = datetime.now() - timedelta(days=DAYS_BACK)
     runs = []
-    for line in _read(LOGS / "run_history.jsonl").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            r = json.loads(line)
-            if datetime.fromisoformat(r["timestamp"]) >= cutoff:
-                runs.append(r)
-        except (json.JSONDecodeError, KeyError, ValueError):
-            continue
+    for d in _data_dirs():
+        for line in _read(d / "run_history.jsonl").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+                if datetime.fromisoformat(r["timestamp"]) >= cutoff:
+                    runs.append(r)
+            except (json.JSONDecodeError, KeyError, ValueError):
+                continue
+    runs.sort(key=lambda r: r.get("timestamp", ""))
     return runs
 
 
@@ -76,27 +106,62 @@ def week_errors():
 
 
 def pending_candidates():
-    """כמה מועמדים למחיקה ממתינים, ומתי נבדק לאחרונה"""
-    try:
-        snap = json.loads(_read(LOGS / "candidates_snapshot.json") or "{}")
+    """כמה מועמדים למחיקה ממתינים (סכום כל החשבונות), ומתי נבדק לאחרונה"""
+    total = 0
+    latest_ts = ""
+    for d in _data_dirs():
+        try:
+            snap = json.loads(_read(d / "candidates_snapshot.json") or "{}")
+        except json.JSONDecodeError:
+            continue
+        total += snap.get("count", 0)
         ts = snap.get("timestamp", "")
-        when = ts[:16].replace("T", " ") if ts else "לא ידוע"
-        return snap.get("count", 0), when
-    except json.JSONDecodeError:
-        return 0, "לא ידוע"
+        if ts > latest_ts:
+            latest_ts = ts
+    when = latest_ts[:16].replace("T", " ") if latest_ts else "לא ידוע"
+    return total, when
 
 
 def deletions_this_week():
     cutoff = datetime.now() - timedelta(days=DAYS_BACK)
     n = 0
-    for line in _read(LOGS / "deletions.jsonl").splitlines():
-        try:
-            d = json.loads(line)
-            if datetime.fromisoformat(d["deleted_at"]) >= cutoff:
-                n += 1
-        except (json.JSONDecodeError, KeyError, ValueError):
-            continue
+    for d in _data_dirs():
+        for line in _read(d / "deletions.jsonl").splitlines():
+            try:
+                rec = json.loads(line)
+                if datetime.fromisoformat(rec["deleted_at"]) >= cutoff:
+                    n += 1
+            except (json.JSONDecodeError, KeyError, ValueError):
+                continue
     return n
+
+
+def connection_warnings():
+    """
+    בודק את מצב החיבור ל-Gmail לכל חשבון (ללא פתיחת דפדפן).
+    מחזיר רשימת אזהרות: חשבונות שצריך לחדש להם חיבור או שמתקרבים לפקיעה.
+    """
+    warnings = []
+    try:
+        sys.path.insert(0, str(BASE))
+        from account_config import load_accounts
+        from gmail_api import GmailAPIClient
+    except Exception:
+        return warnings
+
+    for acc in load_accounts(_config()):
+        try:
+            st = GmailAPIClient(token_file=acc.get("token_file")).get_connection_status()
+        except Exception:
+            continue
+        addr = acc.get("address", "")
+        if st.get("needs_reauth") or not st.get("connected"):
+            warnings.append((addr, "need", st.get("message", "נדרש חיבור מחדש")))
+        else:
+            dsa = st.get("days_since_authorized")
+            if isinstance(dsa, int) and dsa >= 6:
+                warnings.append((addr, "soon", f"החיבור עלול לפוג בקרוב (חובר לפני {dsa} ימים)"))
+    return warnings
 
 
 def esc(s):
@@ -109,7 +174,24 @@ def build_report():
     errors, warnings = week_errors()
     cand_count, cand_when = pending_candidates()
     deletions = deletions_this_week()
+    conn_warn = connection_warnings()
     today = datetime.now().strftime("%d/%m/%Y")
+
+    # --- אזהרת חיבור ל-Gmail ---
+    if conn_warn:
+        items = ""
+        for addr, kind, msg in conn_warn:
+            icon = "🔴" if kind == "need" else "🟠"
+            items += f"<li>{icon} <b>{esc(addr)}</b> — {esc(msg)}</li>"
+        conn_html = f"""<div style="border:2px solid #e67e22;background:#fff6ec;border-radius:8px;
+padding:10px 14px;margin:12px 0">
+<h3 style="margin:0 0 6px;color:#c0620a">🔗 תשומת לב — חיבור ל-Gmail</h3>
+<ul style="margin:4px 0">{items}</ul>
+<p style="font-size:13px;color:#666;margin:4px 0 0">
+פתחי את הדשבורד ולחצי <b>"התחבר מחדש"</b> — אין צורך למחוק קבצים.</p>
+</div>"""
+    else:
+        conn_html = ""
 
     # --- סטטוס כללי ---
     if status == "failed":
@@ -164,6 +246,7 @@ def build_report():
     html = f"""<div dir="rtl" style="font-family:Arial,sans-serif;max-width:640px">
 <h2>{emoji} MailCleaner — דוח שבועי ({today})</h2>
 <p style="font-size:16px"><b>{headline}</b></p>
+{conn_html}
 {runs_html}
 {totals_html}
 <h3>🗑️ ממתין לך</h3>

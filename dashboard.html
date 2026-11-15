@@ -264,7 +264,11 @@
       </select>
     </div>
     <span style="font-size:0.7rem;color:var(--text-dim);font-family:var(--mono)" id="last-refresh">טוען...</span>
-    <div class="status-pill"><div class="status-dot"></div>פעיל</div>
+    <button id="btn-reconnect" class="btn btn-ghost" style="display:none;font-size:0.7rem;padding:0.25rem 0.6rem"
+            onclick="reconnectGmail()" title="חידוש החיבור ל-Gmail — ללא מחיקת קבצים">🔗 התחבר מחדש</button>
+    <div id="conn-pill" class="status-pill" title="מצב החיבור ל-Gmail">
+      <div class="status-dot" id="conn-dot"></div><span id="conn-text">בודק חיבור…</span>
+    </div>
   </div>
 </header>
 
@@ -708,6 +712,13 @@ function connectSSE() {
       if (d.type === 'run_started')  { setRunning(true);  showToast(d.message,'info'); }
       if (d.type === 'run_complete') { setRunning(false); showToast(d.message,'success'); setTimeout(refreshAll,800); }
       if (d.type === 'run_error')    { setRunning(false); showToast('שגיאה: '+d.message,'error'); }
+      if (d.type === 'reconnect_started') showToast(d.message,'info');
+      if (d.type === 'reconnect_done') {
+        showToast(d.message, d.success ? 'success' : 'error');
+        const b = document.getElementById('btn-reconnect');
+        if (b) { b.disabled = false; b.textContent = '🔗 התחבר מחדש'; }
+        loadConnectionStatus();
+      }
     } catch(_) {}
   };
   es.onerror = () => setTimeout(connectSSE, 3000);
@@ -1387,10 +1398,57 @@ async function showPatternTab(tab) {
 }
 
 // ================================================================
+//  מצב חיבור ל-Gmail
+// ================================================================
+async function loadConnectionStatus() {
+  const dot = document.getElementById('conn-dot');
+  const txt = document.getElementById('conn-text');
+  const btn = document.getElementById('btn-reconnect');
+  try {
+    const s = await fetchJSON('/api/connection-status');
+    if (s.connected) {
+      let label = s.email ? ('מחובר: ' + s.email) : 'מחובר';
+      const dl = s.estimated_days_left;
+      if (typeof dl === 'number' && dl <= 2) label += ` · מתחדש בעוד ~${dl} ימים`;
+      dot.style.background = 'var(--accent2)';
+      dot.style.animation  = 'pulse 2s infinite';
+      txt.textContent = label;
+      // כפתור "התחבר מחדש" מופיע רק כשמתקרבים לפקיעה
+      btn.style.display = (typeof dl === 'number' && dl <= 2) ? '' : 'none';
+    } else {
+      dot.style.background = 'var(--danger)';
+      dot.style.animation  = 'none';
+      txt.textContent = s.message || 'לא מחובר';
+      btn.style.display = '';
+    }
+  } catch(e) {
+    if (txt) txt.textContent = 'מצב חיבור לא ידוע';
+  }
+}
+
+async function reconnectGmail() {
+  if (!confirm('ייפתח חלון דפדפן לאישור הגישה ל-Gmail. להמשיך?')) return;
+  const btn = document.getElementById('btn-reconnect');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ מתחבר…'; }
+  try {
+    await fetch(apiUrl('/api/reconnect'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account: activeAccount})
+    });
+    showToast('חידוש החיבור התחיל — אשר/י בחלון הדפדפן','info');
+  } catch(e) {
+    showToast('שגיאה: ' + e, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🔗 התחבר מחדש'; }
+  }
+}
+
+// ================================================================
 //  רענון
 // ================================================================
 async function refreshAll() {
   await Promise.allSettled([
+    loadConnectionStatus(),
     loadStats(), loadDeletions(), loadReviews(), loadPatterns(),
     loadLog(), loadDomainMappings(), loadHistory(), loadScannedCount()
   ]);

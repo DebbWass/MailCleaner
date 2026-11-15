@@ -193,6 +193,65 @@ def list_accounts():
 
 
 # ------------------------------------------------------------------ #
+#  מצב חיבור ל-Gmail + התחברות מחדש                                   #
+# ------------------------------------------------------------------ #
+
+@app.route("/api/connection-status")
+def connection_status():
+    """
+    מחזיר את מצב החיבור ל-Gmail לחשבון הנבחר — בלי לפתוח דפדפן אף פעם.
+    משמש את פס-המצב בראש הדשבורד.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        client = _make_gmail_client(request)
+        st = client.get_connection_status()
+    except Exception as e:
+        return jsonify({"connected": False, "needs_reauth": True,
+                        "message": f"שגיאה בבדיקת חיבור: {e}"})
+
+    # הערכת ימים שנותרו עד שהחיבור יפוג (רלוונטי לאפליקציה במצב Testing — 7 ימים)
+    days_left = None
+    dsa = st.get("days_since_authorized")
+    if isinstance(dsa, int):
+        days_left = max(0, 7 - dsa)
+    st["estimated_days_left"] = days_left
+    return jsonify(st)
+
+
+@app.route("/api/reconnect", methods=["POST"])
+def reconnect_gmail():
+    """
+    מריץ חיבור מחדש מלא (פותח דפדפן במחשב המקומי) — מחליף את הצורך למחוק token.json ידנית.
+    רץ ברקע ומדווח דרך SSE.
+    """
+    # מחשבים את ה-token_file בתוך בקשת ה-HTTP (יש כאן request תקף) ומעבירים ל-thread
+    acc = _get_account_cfg(request)
+    token_file = acc.get("token_file") if acc else None
+
+    def _do_reconnect(tok):
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from gmail_api import GmailAPIClient
+            client = GmailAPIClient(token_file=tok)
+            _push({"type": "reconnect_started",
+                   "message": "נפתח חלון דפדפן לאישור הגישה ל-Gmail..."})
+            ok = client.force_reauth()
+            if ok:
+                _push({"type": "reconnect_done", "success": True,
+                       "message": "✅ החיבור ל-Gmail חודש בהצלחה"})
+            else:
+                _push({"type": "reconnect_done", "success": False,
+                       "message": "❌ חידוש החיבור נכשל — בדוק/י ש-credentials.json קיים"})
+        except Exception as e:
+            _push({"type": "reconnect_done", "success": False,
+                   "message": f"❌ שגיאה בחידוש חיבור: {e}"})
+
+    threading.Thread(target=_do_reconnect, args=(token_file,), daemon=True).start()
+    return jsonify({"success": True, "message": "חידוש החיבור התחיל — עקוב/י אחרי חלון הדפדפן"})
+
+
+# ------------------------------------------------------------------ #
 #  סטטיסטיקות                                                          #
 # ------------------------------------------------------------------ #
 

@@ -8,11 +8,14 @@
 # 4. label cache — מונע קריאות כפולות לרשימת תיקיות
 
 import base64
+import json
 import logging
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -50,9 +53,15 @@ class GmailAPIClient:
     #  התחברות                                                             #
     # ------------------------------------------------------------------ #
 
-    def connect(self) -> bool:
+    def connect(self, interactive: bool = True) -> bool:
+        """
+        מתחבר ל-Gmail API.
+        interactive=True  → מותר לפתוח דפדפן לחיבור מחדש אם הטוקן פג (ריצה ידנית/דשבורד).
+        interactive=False → ריצה אוטומטית ללא מגע יד (scheduler) — לא ייפתח דפדפן;
+                            אם אין טוקן תקף הפעולה תיכשל בשקט ותירשם ללוג.
+        """
         try:
-            creds = self._load_or_refresh_credentials()
+            creds = self._load_or_refresh_credentials(interactive=interactive)
             self.service = build("gmail", "v1", credentials=creds)
             self.connected = True
             logger.info("Gmail API: התחברות הצליחה")
@@ -64,25 +73,154 @@ class GmailAPIClient:
             # הדפס את הסיבה המלאה כדי לעזור באבחון
             logger.error(f"Gmail API נכשל: {type(e).__name__}: {e}")
             if "token" in str(e).lower() or "expired" in str(e).lower() or "invalid" in str(e).lower():
-                logger.error("נראה שהטוקן פג תוקף — מחק את token.json והרץ מחדש")
+                logger.error("החיבור ל-Gmail פג — פתח/י את הדשבורד ולחץ/י 'התחבר מחדש' (אין צורך למחוק קבצים)")
             return False
 
-    def _load_or_refresh_credentials(self) -> Credentials:
+    def force_reauth(self) -> bool:
+        """
+        מוחק טוקן קיים ומריץ חיבור מלא מחדש (פותח דפדפן).
+        משמש את כפתור 'התחבר מחדש' בדשבורד — מחליף את הצורך למחוק את token.json ידנית.
+        """
+        self._discard_token()
+        self.service = None
+        self.connected = False
+        return self.connect(interactive=True)
+
+    def _load_or_refresh_credentials(self, interactive: bool = True) -> Credentials:
         creds = None
         if self._token_file.exists():
-            creds = Credentials.from_authorized_user_file(str(self._token_file), SCOPES)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
+            try:
+                creds = Credentials.from_authorized_user_file(str(self._token_file), SCOPES)
+            except Exception as e:
+                logger.warning(f"קובץ טוקן לא תקין — יחודש: {e}")
+                creds = None
+
+        if creds and creds.valid:
+            return creds
+
+        # ננסה לרענן טוקן קיים
+        if creds and creds.expired and creds.refresh_token:
+            try:
                 creds.refresh(Request())
-            else:
-                if not CREDENTIALS_FILE.exists():
-                    raise FileNotFoundError(f"credentials.json לא נמצא ב-{BASE_DIR}")
-                flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_FILE), SCOPES)
-                creds = flow.run_local_server(port=0)
-            self._token_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._token_file, "w") as f:
-                f.write(creds.to_json())
+                self._save_token(creds)
+                return creds
+            except RefreshError as e:
+                logger.warning(f"רענון הטוקן נכשל (refresh token פג או בוטל): {e}")
+                if not interactive:
+                    raise
+                # ריצה ידנית — מוחקים טוקן פג ומתחברים מחדש אוטומטית, ללא מחיקה ידנית
+                self._discard_token()
+                creds = None
+
+        # אין טוקן תקף — נדרש חיבור מלא
+        if not interactive:
+            raise RuntimeError("נדרש חיבור מחדש ל-Gmail (אין טוקן תקף, וריצה אוטומטית אינה פותחת דפדפן)")
+        if not CREDENTIALS_FILE.exists():
+            raise FileNotFoundError(f"credentials.json לא נמצא ב-{BASE_DIR}")
+        flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_FILE), SCOPES)
+        creds = flow.run_local_server(port=0)
+        self._save_token(creds)
+        self._write_authorized_meta()
         return creds
+
+    # ------------------------------------------------------------------ #
+    #  ניהול טוקן + מצב חיבור                                             #
+    # ------------------------------------------------------------------ #
+
+    def _meta_file(self) -> Path:
+        """קובץ צד שמתעד מתי בוצע חיבור מלא (לא מתעדכן ברענון טוקן רגיל)."""
+        return self._token_file.with_name(self._token_file.name + ".meta.json")
+
+    def _save_token(self, creds: Credentials):
+        self._token_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(self._token_file, "w") as f:
+            f.write(creds.to_json())
+
+    def _write_authorized_meta(self):
+        try:
+            self._meta_file().write_text(
+                json.dumps({"authorized_at": datetime.now().isoformat()}, ensure_ascii=False),
+                encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"לא ניתן לשמור meta של טוקן: {e}")
+
+    def _read_authorized_at(self) -> Optional[str]:
+        try:
+            m = self._meta_file()
+            if m.exists():
+                return json.loads(m.read_text(encoding="utf-8")).get("authorized_at")
+        except Exception:
+            pass
+        return None
+
+    def _discard_token(self):
+        for p in (self._token_file, self._meta_file()):
+            try:
+                if p.exists():
+                    p.unlink()
+            except Exception as e:
+                logger.warning(f"לא ניתן למחוק {p.name}: {e}")
+
+    def get_connection_status(self) -> dict:
+        """
+        מחזיר את מצב החיבור ל-Gmail — ללא פתיחת דפדפן לעולם.
+        משמש את פס-המצב בדשבורד ואת ההתראה בדוח המייל.
+        """
+        status = {
+            "connected":             False,
+            "has_credentials":       CREDENTIALS_FILE.exists(),
+            "has_token":             self._token_file.exists(),
+            "email":                 None,
+            "authorized_at":         self._read_authorized_at(),
+            "days_since_authorized": None,
+            "needs_reauth":          False,
+            "message":               "",
+        }
+
+        if not self._token_file.exists():
+            status["needs_reauth"] = True
+            status["message"] = "לא מחובר — יש להתחבר ל-Gmail"
+            return status
+
+        try:
+            creds = Credentials.from_authorized_user_file(str(self._token_file), SCOPES)
+        except Exception as e:
+            status["needs_reauth"] = True
+            status["message"] = f"קובץ טוקן לא תקין: {e}"
+            return status
+
+        # רענון שקט בלבד — לעולם לא פותח דפדפן
+        if not creds.valid and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                self._save_token(creds)
+            except RefreshError:
+                status["needs_reauth"] = True
+                status["message"] = "החיבור פג — לחץ/י 'התחבר מחדש'"
+                return status
+            except Exception as e:
+                status["message"] = f"שגיאת רענון: {e}"
+
+        if creds and creds.valid:
+            status["connected"] = True
+            status["message"] = "מחובר"
+            try:
+                svc = build("gmail", "v1", credentials=creds)
+                prof = svc.users().getProfile(userId="me").execute()
+                status["email"] = prof.get("emailAddress")
+            except Exception:
+                pass
+
+        auth_at = status["authorized_at"]
+        if auth_at:
+            try:
+                status["days_since_authorized"] = (
+                    datetime.now() - datetime.fromisoformat(auth_at)
+                ).days
+            except Exception:
+                pass
+
+        return status
 
     # ------------------------------------------------------------------ #
     #  קריאת מיילים — Batch + Metadata                                     #
